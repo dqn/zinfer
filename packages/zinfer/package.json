@@ -48,7 +48,7 @@
     "typescript-native": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "26.6.5",
+    "@types/node": "26.6.6",
     "@zinfer-monorepo/core": "workspace:*",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",
