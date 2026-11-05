@@ -1,5 +1,11 @@
 # vinfer
 
+## 0.4.2
+
+### Patch Changes
+
+- 22cf8fb: fix(deps): update dependency glob to v14
+
 ## 0.4.1
 
 ### Patch Changes
