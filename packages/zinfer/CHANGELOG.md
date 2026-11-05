@@ -1,5 +1,11 @@
 # zinfer
 
+## 0.5.3
+
+### Patch Changes
+
+- 22cf8fb: fix(deps): update dependency glob to v14
+
 ## 0.5.2
 
 ### Patch Changes

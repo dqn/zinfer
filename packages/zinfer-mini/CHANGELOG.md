@@ -1,5 +1,11 @@
 # zinfer-mini
 
+## 0.2.2
+
+### Patch Changes
+
+- 22cf8fb: fix(deps): update dependency glob to v14
+
 ## 0.2.1
 
 ### Patch Changes
