@@ -58,6 +58,11 @@ export class SchemaReferenceAnalyzer {
     "check",
   ]);
   /**
+   * Zod methods that build an object schema from the one they are called on
+   * and an object-literal shape whose fields replace the original's.
+   */
+  private static readonly EXTENDING_METHODS = new Set(["extend", "safeExtend"]);
+  /**
    * Analyzes a source file to find all schema references and union references in a single pass.
    */
   analyzeAllReferences(
@@ -250,6 +255,16 @@ export class SchemaReferenceAnalyzer {
   ): SchemaReferenceInfo[] {
     const refs: SchemaReferenceInfo[] = [];
 
+    const chain = this.parseShapeChain(node);
+    if (chain && Node.isIdentifier(chain.root)) {
+      const inherited = this.findShapeReferences(node, schemaNames, currentSchema, new Set());
+      refs.push(
+        ...[...(inherited?.values() ?? [])].filter(
+          (ref): ref is SchemaReferenceInfo => ref !== null,
+        ),
+      );
+    }
+
     // Find Zod object calls
     const objectCalls = this.findZodObjectCalls(node);
 
@@ -291,6 +306,25 @@ export class SchemaReferenceAnalyzer {
     for (const prop of objectLiteral.properties) {
       if (Node.isSpreadAssignment(prop)) {
         const expression = prop.expression;
+        if (
+          Node.isPropertyAccessExpression(expression) &&
+          compiler.getName(expression) === "shape"
+        ) {
+          const shapeRefs = this.findShapeReferences(
+            expression.expression,
+            schemaNames,
+            currentSchema,
+            visitedShapes,
+          );
+          if (!shapeRefs) {
+            refsByField.clear();
+            continue;
+          }
+          for (const [fieldName, ref] of shapeRefs) {
+            refsByField.set(fieldName, ref);
+          }
+          continue;
+        }
         if (!Node.isIdentifier(expression)) {
           refsByField.clear();
           continue;
@@ -345,6 +379,98 @@ export class SchemaReferenceAnalyzer {
   }
 
   /**
+   * Splits an object schema expression into the schema it starts from and the
+   * shapes extending calls add on top of it, innermost first: `Base.extend(a)
+   * .describe("...").extend(b)` starts from `Base` and adds `a`, then `b`.
+   * Returns undefined when a call in the chain may change the schema's fields.
+   */
+  private parseShapeChain(node: Node): { root: Node; extensions: Node[] } | undefined {
+    const extensions: Node[] = [];
+    let current = node;
+    while (Node.isCallExpression(current) && !this.isZodObjectCall(current)) {
+      const callee = current.expression;
+      if (!Node.isPropertyAccessExpression(callee)) return undefined;
+      const method = compiler.getName(callee);
+      if (SchemaReferenceAnalyzer.EXTENDING_METHODS.has(method)) {
+        const [shape] = current.arguments;
+        if (!shape) return undefined;
+        extensions.unshift(shape);
+      } else if (!SchemaReferenceAnalyzer.TYPE_PRESERVING_METHODS.has(method)) {
+        return undefined;
+      }
+      current = callee.expression;
+    }
+    return { root: current, extensions };
+  }
+
+  /**
+   * Finds the references in the top-level fields of an object schema
+   * expression, following a chain that starts from a same-file schema to that
+   * schema's own shape. Returns undefined when the fields cannot be determined.
+   */
+  private findShapeReferences(
+    node: Node,
+    schemaNames: Set<string>,
+    currentSchema: string,
+    visitedShapes: Set<string>,
+  ): Map<string, SchemaReferenceInfo | null> | undefined {
+    const chain = this.parseShapeChain(node);
+    if (!chain) return undefined;
+
+    let refsByField: Map<string, SchemaReferenceInfo | null> | undefined;
+    const { root } = chain;
+    if (Node.isCallExpression(root)) {
+      const [shape] = root.arguments;
+      if (!shape || !Node.isObjectLiteralExpression(shape)) return undefined;
+      refsByField = this.findObjectLiteralReferences(
+        shape,
+        schemaNames,
+        currentSchema,
+        visitedShapes,
+      );
+    } else if (Node.isIdentifier(root)) {
+      const declaration = compiler.getVariableDeclaration(root.getSourceFile(), root.getText());
+      const initializer = declaration?.initializer;
+      if (!declaration || !initializer) return undefined;
+      const shapeId = `${compiler.getFilePath(declaration.getSourceFile())}:${declaration.getStart()}`;
+      if (visitedShapes.has(shapeId)) return undefined;
+      refsByField = this.findShapeReferences(
+        initializer,
+        schemaNames,
+        currentSchema,
+        new Set([...visitedShapes, shapeId]),
+      );
+    }
+    if (!refsByField) return undefined;
+
+    for (const shape of chain.extensions) {
+      if (!Node.isObjectLiteralExpression(shape)) return undefined;
+      for (const [fieldName, ref] of this.findObjectLiteralReferences(
+        shape,
+        schemaNames,
+        currentSchema,
+        visitedShapes,
+      )) {
+        refsByField.set(fieldName, ref);
+      }
+    }
+    return refsByField;
+  }
+
+  /**
+   * Checks whether a call is a Zod object builder such as `z.object(...)`.
+   */
+  private isZodObjectCall(node: CallExpression): boolean {
+    const expr = node.expression;
+    return (
+      Node.isPropertyAccessExpression(expr) &&
+      Node.isIdentifier(expr.expression) &&
+      expr.expression.getText() === "z" &&
+      SchemaReferenceAnalyzer.OBJECT_BUILDERS.has(compiler.getName(expr))
+    );
+  }
+
+  /**
    * Finds all Zod object calls in a node (including the node itself).
    */
   private findZodObjectCalls(node: Node): CallExpression[] {
@@ -352,19 +478,8 @@ export class SchemaReferenceAnalyzer {
 
     // Check the node itself
     const checkNode = (n: Node) => {
-      if (Node.isCallExpression(n)) {
-        const expr = n.expression;
-        if (Node.isPropertyAccessExpression(expr)) {
-          const obj = expr.expression;
-          const method = compiler.getName(expr);
-          if (
-            Node.isIdentifier(obj) &&
-            obj.getText() === "z" &&
-            SchemaReferenceAnalyzer.OBJECT_BUILDERS.has(method)
-          ) {
-            calls.push(n);
-          }
-        }
+      if (Node.isCallExpression(n) && this.isZodObjectCall(n)) {
+        calls.push(n);
       }
     };
 
