@@ -19,3 +19,7 @@ export const ShapeSpreadSchema = z.strictObject({ ...ExportedBaseSchema.shape, e
 export const InlineExtendedSchema = z
   .strictObject({ name: z.string(), extra: KindSchema })
   .extend({ kind: KindSchema, extra: z.string() });
+
+const SatisfiedBaseSchema = z.strictObject({ kind: KindSchema }) satisfies z.ZodType;
+
+export const RefinedSatisfiedSchema = SatisfiedBaseSchema.superRefine(() => {});

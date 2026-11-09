@@ -337,16 +337,8 @@ export class SchemaReferenceAnalyzer {
           objectLiteral.getSourceFile(),
           expression.getText(),
         );
-        let initializer = declaration?.initializer;
-        while (
-          initializer &&
-          (Node.isAsExpression(initializer) ||
-            Node.isSatisfiesExpression(initializer) ||
-            Node.isParenthesizedExpression(initializer) ||
-            Node.isTypeAssertion(initializer))
-        ) {
-          initializer = initializer.expression;
-        }
+        const initializer =
+          declaration?.initializer && this.unwrapExpression(declaration.initializer);
         if (!declaration || !initializer || !Node.isObjectLiteralExpression(initializer)) {
           refsByField.clear();
           continue;
@@ -389,7 +381,7 @@ export class SchemaReferenceAnalyzer {
    */
   private parseShapeChain(node: Node): { root: Node; extensions: Node[] } | undefined {
     const extensions: Node[] = [];
-    let current = node;
+    let current = this.unwrapExpression(node);
     while (Node.isCallExpression(current) && !this.isZodObjectCall(current)) {
       const callee = current.expression;
       if (!Node.isPropertyAccessExpression(callee)) return undefined;
@@ -401,7 +393,7 @@ export class SchemaReferenceAnalyzer {
       } else if (!SchemaReferenceAnalyzer.TYPE_PRESERVING_METHODS.has(method)) {
         return undefined;
       }
-      current = callee.expression;
+      current = this.unwrapExpression(callee.expression);
     }
     return { root: current, extensions };
   }
@@ -458,6 +450,22 @@ export class SchemaReferenceAnalyzer {
       }
     }
     return refsByField;
+  }
+
+  /**
+   * Strips parentheses and type assertions, which leave the schema unchanged.
+   */
+  private unwrapExpression(node: Node): Node {
+    let current = node;
+    while (
+      Node.isAsExpression(current) ||
+      Node.isSatisfiesExpression(current) ||
+      Node.isParenthesizedExpression(current) ||
+      Node.isTypeAssertion(current)
+    ) {
+      current = current.expression;
+    }
+    return current;
   }
 
   /**

@@ -1973,6 +1973,10 @@ describe("ZodTypeExtractor - Generated TypeScript Declarations", () => {
         "{ name: string; kind: KindSchemaInput; extra: string; }",
         "{ name: string; kind: KindSchemaOutput; extra: string; }",
       ]);
+      expect(types("RefinedSatisfiedSchema")).toEqual([
+        "{ kind: KindSchemaInput; }",
+        "{ kind: KindSchemaOutput; }",
+      ]);
     });
   });
 
