@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ImportedBaseSchema } from "./base-schema-reference-common";
 
 export const KindSchema = z.enum(["a", "b"]);
 
@@ -23,3 +24,9 @@ export const InlineExtendedSchema = z
 const SatisfiedBaseSchema = z.strictObject({ kind: KindSchema }) satisfies z.ZodType;
 
 export const RefinedSatisfiedSchema = SatisfiedBaseSchema.superRefine(() => {});
+
+export const PartialBaseSchema = BaseShapeSchema.partial();
+
+export const OmittedBaseSchema = BaseShapeSchema.omit({ name: true });
+
+export const RefinedImportedSchema = ImportedBaseSchema.superRefine(() => {});

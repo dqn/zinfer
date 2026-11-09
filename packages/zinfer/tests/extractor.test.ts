@@ -1978,6 +1978,24 @@ describe("ZodTypeExtractor - Generated TypeScript Declarations", () => {
         "{ kind: KindSchemaOutput; }",
       ]);
     });
+
+    it("leaves a chain through a field-changing call or from an imported schema inline", () => {
+      const results = extractor.extractAll(resolve(fixturesDir, "base-schema-reference-schema.ts"));
+      const types = (schemaName: string) => {
+        const result = results.find((r) => r.schemaName === schemaName);
+        return [result?.input, result?.output];
+      };
+
+      expect(types("PartialBaseSchema")).toEqual([
+        '{ kind?: "a" | "b" | undefined; name?: string | undefined; }',
+        '{ kind?: "a" | "b" | undefined; name?: string | undefined; }',
+      ]);
+      expect(types("OmittedBaseSchema")).toEqual(['{ kind: "a" | "b"; }', '{ kind: "a" | "b"; }']);
+      expect(types("RefinedImportedSchema")).toEqual([
+        '{ kind: "c" | "d"; }',
+        '{ kind: "c" | "d"; }',
+      ]);
+    });
   });
 
   describe("mixed-union-reference-schema.ts", () => {
