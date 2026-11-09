@@ -256,12 +256,12 @@ export class SchemaReferenceAnalyzer {
     const refs: SchemaReferenceInfo[] = [];
 
     const chain = this.parseShapeChain(node);
-    if (chain && Node.isIdentifier(chain.root)) {
-      const inherited = this.findShapeReferences(node, schemaNames, currentSchema, new Set());
+    const shapeRefs = chain
+      ? this.findShapeReferences(node, schemaNames, currentSchema, new Set())
+      : undefined;
+    if (shapeRefs) {
       refs.push(
-        ...[...(inherited?.values() ?? [])].filter(
-          (ref): ref is SchemaReferenceInfo => ref !== null,
-        ),
+        ...[...shapeRefs.values()].filter((ref): ref is SchemaReferenceInfo => ref !== null),
       );
     }
 
@@ -269,6 +269,9 @@ export class SchemaReferenceAnalyzer {
     const objectCalls = this.findZodObjectCalls(node);
 
     for (const objectCall of objectCalls) {
+      // The chain's own z.object() is already covered by shapeRefs, with the
+      // fields an extending call redeclares replaced.
+      if (shapeRefs && objectCall === chain?.root) continue;
       const args = objectCall.arguments;
       if (args.length === 0) continue;
 

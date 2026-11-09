@@ -15,3 +15,7 @@ export const ExportedBaseSchema = z
   .superRefine(() => {});
 
 export const ShapeSpreadSchema = z.strictObject({ ...ExportedBaseSchema.shape, extra: z.string() });
+
+export const InlineExtendedSchema = z
+  .strictObject({ name: z.string(), extra: KindSchema })
+  .extend({ kind: KindSchema, extra: z.string() });
